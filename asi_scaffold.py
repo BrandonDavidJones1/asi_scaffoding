@@ -151,8 +151,10 @@ class Agent:
 
     def _get_tools_description(self) -> str:
         """Generates a string describing available tools for the prompt."""
+        # The fix is to convert the type objects in the annotations to their string names
+        # before passing them to json.dumps.
         return "\n".join(
-            f'- `{name}`: {func.__doc__}\n  Args: {json.dumps(func.__annotations__)}'
+            f'- `{name}`: {func.__doc__}\n  Args: {json.dumps({k: v.__name__ for k, v in func.__annotations__.items()})}'
             for name, func in self.tools.items()
         )
 
