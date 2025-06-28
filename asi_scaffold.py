@@ -39,13 +39,13 @@ Your response must be a single JSON object with two keys: "thoughts" and "comman
 - "command": An object containing the name of the command and its arguments.
 
 Example:
-{
+{{
     "thoughts": "I need to understand my environment. I will start by listing the files in the current directory.",
-    "command": {
+    "command": {{
         "name": "list_directory",
-        "args": {"path": "."}
-    }
-}
+        "args": {{"path": "."}}
+    }}
+}}
 
 Begin. Your first action is crucial. Analyze your goal and your available tools. Formulate a plan.
 """
