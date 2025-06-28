@@ -1,24 +1,4 @@
 #!/usr/bin/env python3
-#
-# =============================================================================
-#  ⚠️  EXTREME DANGER & RESPONSIBILITY WARNING  ⚠️
-# =============================================================================
-#  This script is a scaffolding for an autonomous AI agent. It is designed to
-#  give a Large Language Model (LLM) full and unrestricted access to your
-#  computer's resources, including the ability to execute any command, read/write
-#  any file, and create new AI agents.
-#
-#  THIS IS INHERENTLY DANGEROUS.
-#
-#  DO NOT RUN THIS SCRIPT UNLESS YOU FULLY UNDERSTAND THE RISKS.
-#  IT IS INTENDED FOR SECURITY RESEARCH IN A SECURE, ISOLATED, AIR-GAPPED
-#  ENVIRONMENT. A mistake could lead to:
-#      - Total and irreversible data loss.
-#      - System corruption.
-#      - Uncontrolled self-replication or resource consumption.
-#
-#  You are solely responsible for any and all outcomes.
-# =============================================================================
 
 import os
 import json
@@ -119,6 +99,8 @@ def ask_llm(question: str, model: str = LLM_MODEL) -> str:
     print(f"\n>> Delegating to LLM (Model: {model}): {question}")
     try:
         # This is a simplified, non-conversational query
+        # Note: This tool still calls the API directly, even in manual mode.
+        # This is often desired, as you might want the agent to use its own sub-tasks automatically.
         response_text = query_llm(question, model=model, history=[])
         print(f"<< LLM Response: {response_text}")
         return response_text
@@ -135,8 +117,10 @@ def finish(result: str) -> str:
 # --- Core Agent Logic ---
 
 class Agent:
-    def __init__(self, main_goal: str):
+    # <--- MODIFIED: Added manual_mode flag
+    def __init__(self, main_goal: str, manual_mode: bool = False):
         self.main_goal = main_goal
+        self.manual_mode = manual_mode # <--- ADDED
         self.tools = {
             "execute_shell": execute_shell,
             "read_file": read_file,
@@ -176,11 +160,9 @@ class Agent:
         """Constructs the full prompt for the LLM, managing context window."""
         full_history = self.state.get("history", [])
         
-        # Simple truncation strategy
-        # A more advanced version would use token counting
         history_str = json.dumps(full_history, indent=2)
         while len(history_str) > CONTEXT_WINDOW_TOKEN_LIMIT and len(full_history) > 1:
-            full_history = full_history[1:] # Remove oldest entry
+            full_history = full_history[1:]
             history_str = json.dumps(full_history, indent=2)
 
         prompt = SYSTEM_PROMPT.format(
@@ -197,10 +179,28 @@ class Agent:
 
             print("\n==================== PROMPT TO LLM ====================")
             print(f"Goal: {self.main_goal}")
-            print("Requesting next action from LLM...")
 
             try:
-                llm_response_text = query_llm(prompt, model=LLM_MODEL, history=self.state['history'])
+                # <--- MODIFIED: Logic to switch between auto and manual mode
+                llm_response_text = ""
+                if self.manual_mode:
+                    print("--- MANUAL MODE ---")
+                    print("The prompt that would be sent to the LLM is printed below.")
+                    print("Copy it, generate a response, and paste the raw JSON back here.")
+                    print("------------------------------------------------------------")
+                    print(prompt)
+                    print("------------------------------------------------------------")
+                    print("Paste the LLM's JSON response below. Press Ctrl+D (Unix) or Ctrl+Z+Enter (Windows) when done:")
+                    llm_response_text = sys.stdin.read()
+                    if not llm_response_text:
+                        print("\nNo input received. Exiting.")
+                        sys.exit(0)
+                    print("\n--- Input received, processing... ---")
+                else:
+                    print("Requesting next action from LLM...")
+                    llm_response_text = query_llm(prompt, model=LLM_MODEL, history=self.state['history'])
+                # <--- END MODIFICATION
+
                 response_json = json.loads(llm_response_text)
 
                 thoughts = response_json.get("thoughts", "")
@@ -225,7 +225,6 @@ class Agent:
                 
                 print(f"\nCOMMAND RESULT:\n---\n{result}\n---")
 
-                # Update history and save state
                 self.state["history"].append({
                     "thoughts": thoughts,
                     "command": command_spec,
@@ -259,14 +258,11 @@ def query_llm(prompt: str, model: str, history: List[Dict]) -> str:
         "model": model,
         "prompt": prompt,
         "stream": False,
-        "format": "json", # Ollama specific: ensures JSON output
+        "format": "json",
         "options": {
             "temperature": 0.7,
         }
     }
-    # For conversational models, you might use 'context' with history
-    # This example keeps it simple by including history in the prompt
-    
     response = requests.post(LLM_API_URL, json=payload, timeout=300)
     response.raise_for_status()
     response_data = response.json()
@@ -281,9 +277,18 @@ def main():
         default="Develop a plan to achieve self-improvement and begin executing it. Your first step should be to explore the system and your own source code.",
         help="The main goal for the AI agent."
     )
+    # <--- MODIFIED: Added manual mode argument
+    parser.add_argument(
+        '-m', '--manual',
+        action='store_true',
+        help="Run in manual mode, where you provide the LLM responses."
+    )
     args = parser.parse_args()
 
-    agent = Agent(main_goal=args.goal)
+    # <--- MODIFIED: Pass manual flag to agent
+    agent = Agent(main_goal=args.goal, manual_mode=args.manual)
+    if args.manual:
+        print("--- RUNNING IN MANUAL MODE ---")
     agent.run()
 
 if __name__ == "__main__":
